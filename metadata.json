@@ -1,0 +1,7 @@
+{
+  "name": "Copy of Gemini English Tutor",
+  "description": "Practice your English conversation skills with a friendly AI tutor powered by the Gemini 2.5 Native Audio (Live API). Get real-time spoken feedback and transcriptions.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
