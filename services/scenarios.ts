@@ -13,31 +13,17 @@ DO NOT say the tag out loud. It is for the system only. Include it seamlessly wi
 Only mark a goal as complete once.
 `;
 
-/**
- * Creates a simple numeric hash from a string.
- * Used to generate a consistent image seed for each scenario title.
- */
-const simpleHash = (str: string): number => {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        const char = str.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash |= 0; // Convert to 32bit integer
-    }
-    return Math.abs(hash);
-};
-
-
 const applyInstructionTemplate = (scenario: Omit<IScenario, 'systemInstruction' | 'id' | 'imageUrl'> & { baseInstruction: string; imageKeywords: string }): IScenario => {
     const instruction = GOAL_TRACKING_INSTRUCTION
         .replace('{{GOAL_1}}', scenario.goals[0])
         .replace('{{GOAL_2}}', scenario.goals[1])
         .replace('{{GOAL_3}}', scenario.goals[2]);
+    const scenarioId = scenario.title.toLowerCase().replace(/ /g, '-');
     return {
         ...scenario,
-        id: scenario.title.toLowerCase().replace(/ /g, '-'),
+        id: scenarioId,
         systemInstruction: `${scenario.baseInstruction}\n\n${instruction}`,
-        imageUrl: `https://picsum.photos/seed/${simpleHash(scenario.title)}/400/200`
+        imageUrl: `https://picsum.photos/seed/${scenarioId}/400/200`
     } as IScenario;
 };
 

@@ -1,4 +1,5 @@
 // A simple service to play sound effects using the Web Audio API.
+import { decode, decodeAudioData } from '../utils/audioUtils';
 
 let audioContext: AudioContext | null = null;
 
@@ -8,7 +9,8 @@ let audioContext: AudioContext | null = null;
  */
 const getAudioContext = (): AudioContext => {
   if (!audioContext || audioContext.state === 'closed') {
-    audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    // TTS model outputs at 24kHz
+    audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
   }
   return audioContext;
 };
@@ -17,7 +19,7 @@ const getAudioContext = (): AudioContext => {
  * Resumes the AudioContext if it's in a suspended state.
  * This is often necessary on the first user interaction.
  */
-const resumeAudioContext = async () => {
+export const resumeAudioContext = async () => {
   const ctx = getAudioContext();
   if (ctx.state === 'suspended') {
     try {
@@ -25,6 +27,27 @@ const resumeAudioContext = async () => {
     } catch (e) {
       console.error("Failed to resume AudioContext:", e);
     }
+  }
+};
+
+/**
+ * Plays audio from a base64 encoded string.
+ * This is used for playing back TTS audio from the Gemini API.
+ */
+export const playBase64Audio = async (base64: string) => {
+  await resumeAudioContext();
+  const ctx = getAudioContext();
+  try {
+    const audioBytes = decode(base64);
+    // TTS audio is single channel (mono)
+    const audioBuffer = await decodeAudioData(audioBytes, ctx, 24000, 1);
+    
+    const source = ctx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(ctx.destination);
+    source.start();
+  } catch (error) {
+    console.error("Failed to play base64 audio:", error);
   }
 };
 

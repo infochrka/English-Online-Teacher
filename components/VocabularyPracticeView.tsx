@@ -1,12 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import { LeitnerWord } from '../types';
 import { getPracticeSession, updateWordProgress } from '../services/vocabularyService';
+import { generateSpeech } from '../services/geminiService';
+import { playBase64Audio } from '../services/audioService';
+
+const SpeakerIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} viewBox="0 0 20 20" fill="currentColor">
+        <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.969 9.969 0 0119 10a9.969 9.969 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.97 7.97 0 0017 10a7.97 7.97 0 00-2.343-5.657 1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.983 5.983 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.984 3.984 0 00-1.172-2.828 1 1 0 010-1.414z" clipRule="evenodd" />
+    </svg>
+);
+
+const LoadingSpinner: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={`animate-spin ${className}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    </svg>
+);
+
 
 const Flashcard: React.FC<{ 
     item: LeitnerWord; 
     isFlipped: boolean; 
     onFlip: () => void;
-}> = ({ item, isFlipped, onFlip }) => {
+    onPlayAudio: (word: string) => void;
+    isAudioLoading: boolean;
+}> = ({ item, isFlipped, onFlip, onPlayAudio, isAudioLoading }) => {
+    
+    const handleAudioClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!isAudioLoading) {
+            onPlayAudio(item.word);
+        }
+    };
+
     return (
         <div className="w-full h-80 perspective-1000">
             <div 
@@ -17,8 +43,16 @@ const Flashcard: React.FC<{
                 aria-label={`Flashcard for ${item.word}. Click to flip.`}
             >
                 {/* Front of Card */}
-                <div className="absolute w-full h-full backface-hidden bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl flex items-center justify-center p-6 cursor-pointer shadow-2xl">
-                    <h2 className="text-4xl md:text-5xl font-bold text-white text-center text-glow">{item.word}</h2>
+                <div className="absolute w-full h-full backface-hidden bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl flex flex-col items-center justify-center p-6 cursor-pointer shadow-2xl">
+                    <h2 className="text-4xl md:text-5xl font-bold text-white text-center text-glow mb-4">{item.word}</h2>
+                    <button 
+                        onClick={handleAudioClick}
+                        className="bg-black/20 hover:bg-black/40 text-white p-3 rounded-full transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-400 disabled:opacity-50"
+                        aria-label={`Play pronunciation for ${item.word}`}
+                        disabled={isAudioLoading}
+                    >
+                        {isAudioLoading ? <LoadingSpinner className="w-6 h-6" /> : <SpeakerIcon className="w-6 h-6" />}
+                    </button>
                 </div>
 
                 {/* Back of Card */}
@@ -39,6 +73,7 @@ const VocabularyPracticeView: React.FC = () => {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isFlipped, setIsFlipped] = useState(false);
     const [sessionComplete, setSessionComplete] = useState(false);
+    const [isAudioLoading, setIsAudioLoading] = useState(false);
     
     useEffect(() => {
         const words = getPracticeSession();
@@ -59,6 +94,22 @@ const VocabularyPracticeView: React.FC = () => {
             setIsFlipped(false);
         } else {
             setSessionComplete(true);
+        }
+    };
+
+    const handlePlayAudio = async (word: string) => {
+        setIsAudioLoading(true);
+        try {
+            const audioData = await generateSpeech(word);
+            if (audioData) {
+                await playBase64Audio(audioData);
+            } else {
+                console.error("Failed to generate audio for the word.");
+            }
+        } catch (error) {
+            console.error("Error in audio playback flow:", error);
+        } finally {
+            setIsAudioLoading(false);
         }
     };
     
@@ -92,6 +143,8 @@ const VocabularyPracticeView: React.FC = () => {
                         item={currentItem}
                         isFlipped={isFlipped}
                         onFlip={() => setIsFlipped(!isFlipped)}
+                        onPlayAudio={handlePlayAudio}
+                        isAudioLoading={isAudioLoading}
                     />
                 ) : (
                     <div className="w-full h-80 bg-white/5 rounded-2xl flex items-center justify-center">

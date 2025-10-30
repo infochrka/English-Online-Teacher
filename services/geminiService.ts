@@ -21,8 +21,11 @@ export const startConversation = async (callbacks: SessionCallbacks, systemInstr
   let scriptProcessor: ScriptProcessorNode | null = null;
   let sourceNode: MediaStreamAudioSourceNode | null = null;
 
-  // Audio Playback
+  // Audio Contexts
+  const inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
   const outputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+  
+  // Audio Playback
   const outputNode = outputAudioContext.createGain();
   outputNode.connect(outputAudioContext.destination);
   const sources = new Set<AudioBufferSourceNode>();
@@ -135,7 +138,7 @@ export const startConversation = async (callbacks: SessionCallbacks, systemInstr
     },
     config: {
       responseModalities: [Modality.AUDIO],
-      inputAudioTranscription: { languageCode: 'en-US' },
+      inputAudioTranscription: {},
       outputAudioTranscription: {},
       speechConfig: {
         voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
@@ -144,8 +147,6 @@ export const startConversation = async (callbacks: SessionCallbacks, systemInstr
     },
   });
 
-  const inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
-  
   const closeSession = async () => {
     if (scriptProcessor) scriptProcessor.disconnect();
     if (sourceNode) sourceNode.disconnect();
@@ -166,6 +167,65 @@ export const startConversation = async (callbacks: SessionCallbacks, systemInstr
   };
 
   return { close: closeSession };
+};
+
+export const generateSpeech = async (text: string): Promise<string | null> => {
+    if (!text.trim()) return null;
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash-preview-tts",
+            contents: [{ parts: [{ text }] }],
+            config: {
+                responseModalities: [Modality.AUDIO],
+                speechConfig: {
+                    voiceConfig: {
+                      prebuiltVoiceConfig: { voiceName: 'Kore' }, // A neutral, clear voice
+                    },
+                },
+            },
+        });
+        const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        return base64Audio || null;
+    } catch (error) {
+        console.error("Error generating speech:", error);
+        return null;
+    }
+};
+
+
+export const getRealtimeFeedback = async (text: string): Promise<string | null> => {
+    if (!text.trim()) return null;
+
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const model = 'gemini-2.5-flash';
+
+    const prompt = `You are an English grammar correction assistant. Analyze the user's sentence. If there is a single, clear grammatical error, provide a short, corrected version. If the sentence is grammatically correct or the error is minor/stylistic, return an empty string. Respond ONLY in JSON format: {"correction": "corrected sentence" or ""}`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model,
+            contents: `${prompt}\n\nSentence: "${text}"`,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        correction: { type: Type.STRING }
+                    },
+                    required: ['correction']
+                }
+            }
+        });
+
+        const jsonText = response.text.trim();
+        const result = JSON.parse(jsonText);
+        
+        return result.correction || null;
+    } catch (error) {
+        console.error("Error getting real-time feedback:", error);
+        return null;
+    }
 };
 
 export const getConversationFeedback = async (conversationHistory: ConversationTurn[]): Promise<Feedback> => {

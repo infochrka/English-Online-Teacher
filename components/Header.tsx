@@ -44,6 +44,8 @@ const Header: React.FC<HeaderProps> = ({ currentView, onNavigate }) => {
                     <NavItem view="home" currentView={currentView} onNavigate={onNavigate}>Home</NavItem>
                     <NavItem view="scenarios" currentView={currentView} onNavigate={onNavigate}>Scenarios</NavItem>
                     <NavItem view="vocabulary" currentView={currentView} onNavigate={onNavigate}>Vocabulary</NavItem>
+                    <NavItem view="history" currentView={currentView} onNavigate={onNavigate}>History</NavItem>
+                    <NavItem view="desktop" currentView={currentView} onNavigate={onNavigate}>Desktop App</NavItem>
                 </nav>
             </div>
         </div>

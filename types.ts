@@ -6,7 +6,7 @@ export enum ConversationStatus {
   ERROR = 'ERROR',
 }
 
-export type AppView = 'home' | 'scenarios' | 'vocabulary';
+export type AppView = 'home' | 'scenarios' | 'vocabulary' | 'desktop' | 'history';
 export type ScenarioState = 'selection' | 'conversation' | 'feedback';
 
 
@@ -61,4 +61,11 @@ export interface VocabularyStats {
     totalWords: number;
     wordsToReview: number;
     wordsMastered: number;
+}
+
+export interface ConversationHistoryItem {
+    id: string; // ISO date string of when the conversation was saved
+    scenario: IScenario;
+    conversation: ConversationTurn[];
+    feedback: Feedback;
 }

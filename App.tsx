@@ -1,7 +1,8 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { ConversationStatus, ConversationTurn, IScenario, Feedback, AppView, ScenarioState } from './types';
-import { startConversation, LiveSession, getConversationFeedback } from './services/geminiService';
+import { startConversation, LiveSession, getConversationFeedback, getRealtimeFeedback } from './services/geminiService';
 import * as audioService from './services/audioService';
+import * as historyService from './services/historyService';
 import { scenarios } from './services/scenarios';
 import ConversationView from './components/ConversationView';
 import ControlButton from './components/ControlButton';
@@ -11,6 +12,9 @@ import FeedbackView from './components/FeedbackView';
 import VocabularyPracticeView from './components/VocabularyPracticeView';
 import HomeView from './components/HomeView';
 import Header from './components/Header';
+import DesktopAppView from './components/DesktopAppView';
+import RealtimeHint from './components/RealtimeHint';
+import HistoryView from './components/HistoryView';
 
 const App: React.FC = () => {
   const [status, setStatus] = useState<ConversationStatus>(ConversationStatus.IDLE);
@@ -21,11 +25,21 @@ const App: React.FC = () => {
   const [selectedScenario, setSelectedScenario] = useState<IScenario | null>(null);
   const [achievedGoals, setAchievedGoals] = useState<Set<string>>(new Set());
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [realtimeHint, setRealtimeHint] = useState<string | null>(null);
 
   const currentTranscriptionRef = useRef<{ user: string; ai: string }>({ user: '', ai: '' });
   const liveSessionRef = useRef<LiveSession | null>(null);
+  const hintTimeoutRef = useRef<number | null>(null);
 
   const forceUpdate = useForceUpdate();
+
+  const clearHint = () => {
+    if (hintTimeoutRef.current) {
+      clearTimeout(hintTimeoutRef.current);
+      hintTimeoutRef.current = null;
+    }
+    setRealtimeHint(null);
+  }
 
   const closeLiveSession = useCallback(() => {
     if (liveSessionRef.current) {
@@ -39,10 +53,22 @@ const App: React.FC = () => {
 
     if (messageData.isFinal && (messageData.user || messageData.ai)) {
       audioService.playMessageSound();
+      const userText = messageData.user.trim();
+
+      if (userText) {
+          getRealtimeFeedback(userText).then(correction => {
+            if (correction) {
+                if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
+                setRealtimeHint(correction);
+                hintTimeoutRef.current = window.setTimeout(() => {
+                    setRealtimeHint(null);
+                }, 7000); // Hint disappears after 7 seconds
+            }
+        });
+      }
+
       setConversation(prev => [
         ...prev,
-        // FIX: Add 'as const' to prevent TypeScript from widening the 'speaker' property to 'string'.
-        // This ensures the object type matches the 'ConversationTurn' interface.
         { speaker: 'user' as const, text: messageData.user },
         { speaker: 'ai' as const, text: messageData.ai }
       ].filter(turn => turn.text.trim() !== ''));
@@ -109,12 +135,14 @@ const App: React.FC = () => {
 
   const stopSessionAndGetFeedback = async () => {
     closeLiveSession();
+    clearHint();
     setStatus(ConversationStatus.ANALYZING);
     
     const validConversation = conversation.filter(turn => turn.text.trim() !== '');
-    if (validConversation.length > 0) {
+    if (validConversation.length > 0 && selectedScenario) {
         const analysis = await getConversationFeedback(validConversation);
         setFeedback(analysis);
+        historyService.saveConversation(selectedScenario, validConversation, analysis);
     } else {
         setFeedback({
             intonation: "No conversation was recorded.",
@@ -144,6 +172,7 @@ const App: React.FC = () => {
     setStatus(ConversationStatus.IDLE);
     setAchievedGoals(new Set());
     setFeedback(null);
+    clearHint();
     currentTranscriptionRef.current = { user: '', ai: '' };
   }
 
@@ -171,6 +200,7 @@ const App: React.FC = () => {
         closeLiveSession();
         setStatus(ConversationStatus.IDLE);
     }
+    clearHint();
     setView(targetView);
   }
 
@@ -193,6 +223,7 @@ const App: React.FC = () => {
                         </main>
                         <footer className="p-4 bg-black/10 backdrop-blur-sm">
                             <div className="max-w-3xl mx-auto flex flex-col items-center gap-4">
+                                <RealtimeHint hint={realtimeHint} />
                                 <StatusIndicator status={status} error={currentError} />
                                 <ControlButton status={status} onClick={handleToggleConversation} />
                             </div>
@@ -214,6 +245,10 @@ const App: React.FC = () => {
             return renderScenarioContent();
         case 'vocabulary':
             return <VocabularyPracticeView />;
+        case 'desktop':
+            return <DesktopAppView />;
+        case 'history':
+            return <HistoryView />;
         default:
             return <HomeView onNavigate={handleNavigate} />;
     }
